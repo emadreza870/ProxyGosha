@@ -1,0 +1,17 @@
+// wrangler configuration (D1). The deployable artifact remains the committed
+// single-file worker.js — dashboard "Edit code" paste still works and is the
+// recommended path for non-CLI users. This file is for `wrangler deploy` users.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "proxygosha",
+  "main": "worker.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // No bindings required: everything runs on the free plan with env vars only.
+  // Set variables/secrets in the dashboard or via `wrangler secret put`:
+  //   ADMIN_KEY (required for the panel), SECRET (recommended), KEY_EPOCH,
+  //   EXTRA_HOSTS, DECOY_URL, CARRIER, HOSTNAME, USER_SECRETS, DC_OVERRIDE, ...
+  "observability": {
+    "enabled": false
+  }
+}

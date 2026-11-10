@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build single-file worker.js
+        run: npm run build
+      - name: Verify worker.js is committed and current
+        run: git diff --exit-code worker.js || (echo "worker.js is stale — run npm run build and commit" && exit 1)
+      - name: Tests
+        run: npm test
+      - name: Size check (<3 MB free-plan budget)
+        run: node -e "const s=require('fs').statSync('worker.js').size;console.log((s/1024).toFixed(1)+' KB');if(s>3*1024*1024)process.exit(1)"

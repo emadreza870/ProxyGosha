@@ -1,6 +1,8 @@
-# ProxyGosha — Telegram WEB Proxy on Cloudflare Workers
+<div dir="rtl">
 
-> A private Telegram proxy that runs on Cloudflare's free tier. One file, one setting, no server to rent or maintain.
+# ProxyGosha — پروکسی WEB تلگرام روی Cloudflare Workers
+
+> یک پروکسی خصوصی تلگرام که روی طرح رایگان Cloudflare اجرا می‌شود. یک فایل، یک تنظیم، بدون سرور اجاره‌ای.
 
 <p align="center">
   <a href="https://github.com/amirmarandidev/ProxyGosha/stargazers"><img src="https://img.shields.io/github/stars/amirmarandidev/ProxyGosha?style=for-the-badge&color=gold" alt="GitHub Stars"></a>
@@ -10,192 +12,270 @@
 </p>
 
 <p align="center">
-  <a href="README.md"><b>English</b></a> •
-  <a href="README.fa.md"><b>فارسی</b></a> •
-  <a href="README.ru.md"><b>Русский</b></a> •
-  <a href="README.zh.md"><b>简体中文</b></a> •
-  <a href="llms.txt"><b>llms.txt</b></a>
+  <a href="README.md"><b>فارسی</b></a> •
+  <a href="docs/README.ru.md"><b>Русский</b></a> •
+  <a href="docs/README.zh.md"><b>简体中文</b></a> •
+  <a href="docs/llms.txt"><b>llms.txt</b></a>
 </p>
 
 ---
 
-## What this is
+## 📺 آموزش ویدیویی
 
-Telegram added a new proxy type called **WEB**. Unlike the classic MTProto proxy, it travels as ordinary HTTPS traffic, so it can run behind Cloudflare.
+> [!TIP]
+> آموزش گام‌به‌گام کامل روی یوتیوب: ▶️ **[تماشای آموزش](https://youtu.be/7StSCQdpqvk)**
 
-ProxyGosha turns a free Cloudflare Worker into that kind of proxy.
-
-**In plain terms:** Cloudflare is a huge network that a large part of the web runs through, so blocking it outright is costly for a censor. Your Worker is a small program running inside that network. Telegram talks to your Worker, and your Worker passes the traffic on to Telegram's servers.
-
-- **It looks like a website.** Anyone who opens your address in a browser sees an ordinary online store.
-- **It cannot read your messages.** Telegram encrypts traffic between your app and its servers. The proxy only carries those encrypted bytes.
-- **It costs nothing to run.** The Worker runs on Cloudflare's free plan. The only optional cost is a domain name, which usually costs a few dollars a year.
+> [!NOTE]
+> 📢 **کانال تلگرام:** دامنه‌های تمیز، اعلان‌ها و نکات راه‌اندازی: **[t.me/amirdotlog](https://t.me/amirdotlog)**
+> 🔴 **یوتیوب:** [youtube.com/@amirmarandidev](https://www.youtube.com/@amirmarandidev)
 
 ---
 
-## Before you start
+## 🚀 تازه‌های نسخه 1.3.0
 
-You need:
+این نسخه یک نسخه **سخت‌سازی امنیتی و کارایی** است. اگر قبلاً فقط `ADMIN_KEY` تنظیم کرده بودید، **همه لینک‌های قبلی دقیقاً همان‌طور که بودند کار می‌کنند** (سازگاری بایتی با v1.2.2 با تست golden تضمین شده است).
 
-1. **A Cloudflare account.** It's free. Sign up at [dash.cloudflare.com](https://dash.cloudflare.com/).
-2. **A domain name (strongly recommended).** The default `workers.dev` address is filtered in some countries, including Iran, and may not open on every port. Any cheap domain added to Cloudflare will do.
-3. **A Telegram app that offers the WEB proxy type.** Telegram Desktop already has it. Mobile apps get it through app updates.
+- 🔐 **سکرت مستقل از ADMIN_KEY (S1):** مسیر توصیه‌شده اکنون تنظیم `SECRET` مستقل است؛ صفحه راه‌اندازی هر دو را برایتان می‌سازد. اگر در حالت قدیمی هستید، پنل هشدار + مقدار دقیق SECRET برای فریز لینک‌ها نشان می‌دهد.
+- 🕵️ **مقاومت بیشتر در برابر probe (S2):** همه مسیرهای شکست‌خورده و ناشناخته پاسخ یکسان می‌دهند؛ برند فروشگاه فریب، پالت رنگ، محصولات و مسیرهای API برای هر دیپلوی منحصربه‌فرد می‌شوند.
+- 🍪 **ورود پنل با کوکی (S3):** به‌جای گذاشتن کلید در آدرس، از `/login` وارد شوید. مسیر قدیمی هنوز کار می‌کند ولی منسوخ است.
+- ⏱️ **توکن‌های محدود و قابل ابطال (S4):** وابستگی توکن به host، عمر نشست ۶ ساعت + نوسازی خودکار در پل، و `KEY_EPOCH` برای ابطال انبوه.
+- 🧱 **جداسازی سخت پورت‌ها (S5):** هر پورت فقط سکرت خودش را می‌پذیرد.
+- ⚡ ** batching واقعی آپ‌استریم (F1):** ادعای نسخه قبل حالا واقعی است — قاب‌ها تا 256 KiB یکی شده و با ۲ عملیات رمز و یک نوشتن به DC می‌روند.
+- 🚄 **اتصال سریع‌تر به DC (F2):** حافظه «آخرین نقطه سالم»، تلاش موازی پله‌ای و کاهش بدترین‌حالت اتصال از ~۱۲ ثانیه به زیر ۳.۵ ثانیه.
+- 🧩 **امکانات جدید:** سکرت اختصاصی هر کاربر با ابطال جداگانه (`USER_SECRETS`)، QR و دکمه کپی و تست تأخیر در پنل، `DC_OVERRIDE`، هوک هشدار اختیاری (`ALERT_URL`).
+
+<details>
+<summary>فهرست کامل تغییرات</summary>
+<code>CHANGELOG.md</code> را ببینید.
+</details>
 
 ---
 
-## Setup — five steps
+## این چیست؟
 
-### Step 1 — Create the Worker
+تلگرام یک نوع پروکسی جدید به نام **WEB** اضافه کرده است. برخلاف MTProto کلاسیک، این نوع به‌شکل ترافیک معمولی HTTPS سفر می‌کند و می‌تواند پشت Cloudflare اجرا شود.
 
-1. Open the [Cloudflare Dashboard](https://dash.cloudflare.com/).
-2. Go to **Workers & Pages** → **Create application** → **Create Worker**.
-3. Give it any name (for example `my-tg-proxy`) and click **Deploy**.
+ProxyGosha یک Worker رایگان Cloudflare را به همین نوع پروکسی تبدیل می‌کند.
 
-### Step 2 — Paste the code
+**به زبان ساده:** Cloudflare شبکه‌ای عظیم است که بخش بزرگی از وب از آن عبور می‌کند؛ فیلترکردن کامل آن برای سانسورگر پرهزینه است. Worker شما یک برنامه کوچک درون همین شبکه است. تلگرام با Worker شما حرف می‌زند و Worker شما ترافیک را به سرورهای تلگرام می‌رساند.
 
-1. On the Worker's page, click **Edit code**.
-2. Delete everything in the editor and paste the full contents of [`worker.js`](worker.js).
-3. Click **Deploy**.
+- **شبیه یک وب‌سایت است.** هر کس آدرس شما را در مرورگر باز کند یک فروشگاه اینترنتی عادی می‌بیند (برند و رنگ‌بندی فروشگاه برای هر دیپلوی متفاوت است).
+- **نمی‌تواند پیام‌هایتان را بخواند.** تلگرام ترافیک بین اپ شما و سرورهایش را رمز می‌کند؛ پروکسی فقط بایت‌های رمزشده را جابه‌جا می‌کند.
+- **هیچ هزینه‌ای ندارد.** همه‌چیز روی طرح رایگان Cloudflare اجرا می‌شود.
 
-### Step 3 — Set your admin key (the only required setting)
+---
 
-1. Open your Worker's address in a browser. You will see a **setup page** that suggests a random key. Copy it.
-2. In the dashboard, open your Worker → **Settings** → **Variables and Secrets** → **Add**:
-   - **Name:** `ADMIN_KEY`
-   - **Value:** the key you copied (or any password of at least 16 English letters and digits)
-3. Click **Deploy**.
+## پیش از شروع
+
+نیاز دارید به:
+
+1. **یک حساب Cloudflare.** رایگان است: [dash.cloudflare.com](https://dash.cloudflare.com/).
+2. **یک دامنه (به‌شدت توصیه می‌شود).** آدرس پیش‌فرض `workers.dev` در خیلی از کشورها از جمله ایران فیلتر است. هر دامنه ارزان که به Cloudflare وصل شود کافی است.
+3. **یک اپ تلگرام با نوع پروکسی WEB.** تلگرام دسکتاپ دارد؛ اپ موبایل با به‌روزرسانی‌ها اضافه می‌شود.
+
+---
+
+## راه‌اندازی — پنج گام
+
+### گام ۱ — ساخت Worker
+
+1. [داشبورد Cloudflare](https://dash.cloudflare.com/) را باز کنید.
+2. **Workers & Pages** → **Create application** → **Create Worker**.
+3. یک نام بدهید (مثلاً `my-tg-proxy`) و **Deploy** را بزنید.
+
+### گام ۲ — چسباندن کد
+
+1. در صفحه Worker روی **Edit code** بزنید.
+2. همه‌چیز را پاک کنید و محتوای کامل [`worker.js`](worker.js) را بچسبانید.
+3. **Deploy** را بزنید.
+
+> کد از سورس‌های `src/` با esbuild به همین تک‌فایل ساخته می‌شود؛ خروجی ساخته‌شده در مخزن commit شده است. اگر خودتان می‌خواهید بسازید: `npm install && npm run build`.
+
+### گام ۳ — تنظیم کلید مدیر و SECRET
+
+1. آدرس Worker را در مرورگر باز کنید؛ **صفحه راه‌اندازی** یک `ADMIN_KEY` قوی و یک `SECRET` ۳۲حرفی پیشنهاد می‌کند. هر دو را کپی کنید.
+2. در داشبورد: Worker → **Settings** → **Variables and Secrets** → **Add**:
+   - نام `ADMIN_KEY`، مقدار کلید پیشنهادی (یا هر رمز ۲۴+ کاراکتری مختلط).
+   - نام `SECRET`، مقدار ۳۲حرفی hex پیشنهادی.
+3. **Deploy** را بزنید.
+4. (اختیاری ولی مفید) متغیر `KEY_EPOCH` را مثلاً `1` بگذارید؛ تغییر عدد آن همه توکن‌های جاری را یکجا باطل می‌کند.
 
 > [!IMPORTANT]
-> Treat `ADMIN_KEY` like a password. Anyone who has it can open your panel and see your proxy secret.
+> `ADMIN_KEY` مثل رمز عبور است — هر کس آن را دارد پنل شما را می‌بیند. `SECRET` خودِ سکرت پروکسی است — هر کس آن را دارد می‌تواند از پروکسی استفاده کند. هیچ‌کدام را با کاربران به اشتراک نگذارید؛ کاربران فقط لینک‌ها یا جفت پورت/سکرت هر پورت را می‌گیرند.
 
-### Step 4 — Connect your domain
+> [!WARNING]
+> اگر فقط `ADMIN_KEY` تنظیم کنید (بدون `SECRET`)، سکرت‌های پروکسی از آن مشتق می‌شوند: هم امنیتش کمتر است و هم با عوض‌کردن ADMIN_KEY همه لینک‌های ارسالی می‌شکند. پنل در این حالت هشدار و مقدار دقیق `SECRET` را برای فریز لینک‌های فعلی نشان می‌دهد — همان را در متغیر `SECRET` ذخیره کنید.
 
-1. Add your domain to Cloudflare. Cloudflare will show you two nameservers. Set those nameservers at the company you bought the domain from.
-2. In your Worker, go to **Settings** → **Domains & Routes** → **Add** → **Custom Domain**.
-3. Enter a subdomain, for example `tg.yourdomain.com`. Cloudflare sets up the certificate and DNS automatically.
+### گام ۴ — وصل‌کردن دامنه
 
-### Step 5 — Open your panel and connect
+1. دامنه را به Cloudflare اضافه کنید و nameserverها را در پنل ثبت‌کننده دامنه تنظیم کنید.
+2. در Worker: **Settings** → **Domains & Routes** → **Add** → **Custom Domain**.
+3. مثلاً `tg.yourdomain.com` را وارد کنید؛ گواهی و DNS خودکار ساخته می‌شود.
 
-Go to:
+> [!WARNING]
+> دامنه `workers.dev` در فایروال کشورهایی مثل ایران، چین و روسیه به‌صورت پیش‌فرض مسدود است. برای اتصال پایدار **حتماً دامنه شخصی** وصل کنید. دامنه رایگان: [digitalplat](https://domain.digitalplat.org/)؛ دامنه ارزان: Namecheap (TLDهایی مثل `.xyz` زیر ۱ دلار). درباره دامنه‌های ملی (مثل `.ir`) احتیاط کنید: ثبت‌شان هویت‌سنجی می‌خواهد.
+
+### گام ۵ — ورود به پنل و اتصال
+
+برای امنیت بیشتر از صفحه ورود استفاده کنید:
 
 ```text
-https://tg.yourdomain.com/YOUR_ADMIN_KEY
+https://tg.yourdomain.com/login
 ```
 
-The panel shows two ways to connect:
+با `ADMIN_KEY` وارد شوید (کوکی امن ۶ ساعته می‌گیرید). مسیر قدیمی `https://tg.yourdomain.com/YOUR_ADMIN_KEY` هم کار می‌کند ولی منسوخ است و کلید شما را در تاریخچه مرورگر باقی می‌گذارد.
 
-- **One tap:** a **Connect in Telegram** button for each of the six ports. On a phone or desktop with Telegram installed, tapping it adds the proxy straight away.
-- **Manual entry:** the **server**, and the corresponding **port** and **secret** pair shown in the panel table:
+پنل دو راه اتصال می‌دهد:
 
-| Field | Value |
+- **یک‌ضربه‌ای:** دکمه **Connect in Telegram** برای هر شش پورت + کد QR.
+- **ورود دستی:** مقدار **سرور** و جفت **پورت/سکرت** همان پورت:
+
+| فیلد | مقدار |
 |---|---|
-| Server | `tg.yourdomain.com` |
-| Port | any one of `443` · `2053` · `2083` · `2087` · `2096` · `8443` |
-| Secret | the specific secret shown for that port in the panel table |
+| سرور | `tg.yourdomain.com` |
+| پورت | یکی از `443` · `2053` · `2083` · `2087` · `2096` · `8443` |
+| سکرت | سکرت همان پورت از پنل |
 
-Where to enter them in Telegram:
+> [!IMPORTANT]
+> جداسازی پورت‌ها اکنون **سخت‌گیرانه** است: هر سکرت فقط روی پورت خودش کار می‌کند. اگر رفتار قدیمی (سکرت ۴۴۳ روی همه پورت‌ها) را می‌خواهید، متغیر `LEGACY_PORT_SECRETS=1` را تنظیم کنید.
 
-- **Desktop:** Settings → Advanced → Connection type → Use custom proxy → Add proxy → **WEB**
-- **Mobile:** Settings → Data and Storage → Proxy → Add Proxy → **WEB** (once your app version offers it)
+جای وارد‌کردن در تلگرام:
 
-**Done.** To share the proxy, send people **the links or the connection values (server, port, and that port's secret)**. Never send the panel address.
+- **دسکتاپ:** Settings → Advanced → Connection type → Use custom proxy → Add proxy → **WEB**
+- **موبایل:** Settings → Data and Storage → Proxy → Add Proxy → **WEB**
+
+**تمام.** برای اشتراک‌گذاری، فقط لینک‌ها یا مقادیر اتصال (سرور، پورت و سکرت همان پورت) را بفرستید. هرگز آدرس پنل را نفرستید.
+
+### وضعیت زنده و عیب‌یابی
+
+```text
+https://tg.yourdomain.com/panel/status?probe=1
+```
+
+- **آمار زنده:** نشست‌های فعال، استریم‌ها، ترافیک بالا/پایین، عمر ایزوله، نگهبان حافظه.
+- **کارایی DC:** میانگین تأخیر (EMA) هر دیتاسنتر + آخرین نقطه سالم.
+- **تست تأخیر سمت شما:** صفحه `پنل → Latency test` از مرورگر خودتان پورت‌ها را می‌سنجد و رتبه‌بندی می‌کند.
+- **گزارش env:** همه متغیرهای تنظیم‌شده/ناشناخته/نامعتبر با پیام واضح.
+- **حفظ حریم خصوصی:** هیچ IP، توکن یا سکرتی ثبت نمی‌شود؛ همه‌چیز فقط در حافظه همین ایزوله کلودفلر است.
 
 ---
 
-## Ports
+## پورت‌ها
 
-All six Cloudflare HTTPS ports work without any extra setting:
+هر شش پورت HTTPS کلودفلر بدون تنظیم اضافه کار می‌کنند:
 
 `443` · `2053` · `2083` · `2087` · `2096` · `8443`
 
-Each port has its own unique secret (derived deterministically from your setup) to keep connections isolated. If one port is slow or blocked, switch to another port and use its matching secret from the panel. You can add the proxy multiple times with different ports and switch between them in Telegram anytime.
+هر پورت سکرت یکتای خودش را دارد (مشتق قطعی از سکرت شما) و فقط روی همان پورت پذیرفته می‌شود. اگر یک پورت کند یا فیلتر بود، از پنل سکرت پورت دیگر را بردارید. می‌توانید چند پورت را همزمان در تلگرام اضافه کنید و بین‌شان جابه‌جا شوید.
 
 ---
 
-## Settings reference
+## مرجع تنظیمات
 
-Only `ADMIN_KEY` is required. Everything else is optional.
+فقط `ADMIN_KEY` الزامی است؛ `SECRET` به‌شدت توصیه می‌شود. بقیه اختیاری‌اند. همه متغیرهای زیر واقعاً توسط کد خوانده می‌شوند و وضعیت‌شان در `/panel/status` گزارش می‌شود؛ متغیر ناشناخته یا نامعتبر هم همان‌جا با پیام واضح علامت می‌خورد.
 
-| Variable | Purpose |
+| متغیر | توضیح |
 |---|---|
-| `ADMIN_KEY` | **Required.** Password for your panel. Your proxy secrets are derived from it. |
-| `SECRET` | A fixed 32-character hex secret for port 443 (and the base for other ports). Set this if you want to change `ADMIN_KEY` later without breaking links you already shared. |
-| `EXTRA_HOSTS` | Other domains attached to this Worker, separated by commas. The panel generates links for them too. |
-| `DECOY_URL` | A real website to show visitors instead of the built-in store page. Using one makes your proxy harder to tell apart from other deployments. |
-| `CARRIER` | Leave it empty. Set it to `websocket` only if the default mode gives you trouble. |
+| `ADMIN_KEY` | **الزامی برای پنل.** کلید ورود مدیر (توصیه: ۲۴+ کاراکتر مختلط). در حالت legacy سکرت‌ها از آن مشتق می‌شوند. |
+| `SECRET` | **توصیه‌شده.** سکرت مستقل ۳۲حرفی hex برای پورت ۴۴۳ و پایه بقیه پورت‌ها. با تنظیمش، عوض‌کردن ADMIN_KEY لینک‌ها را نمی‌شکند. |
+| `KEY_EPOCH` | هر عدد/رشته‌ای؛ با تغییرش همه توکن‌های carrier صادرشده فوراً باطل می‌شوند (ابطال انبوه). |
+| `EXTRA_HOSTS` | دامنه‌های دیگر متصل به این Worker، جدا با کاما؛ پنل برایشان لینک می‌سازد. |
+| `DECOY_URL` | یک سایت واقعی برای نمایش به بازدیدکنندگان (کش ۶۰ ثانیه‌ای در لبه). تنها درخواست خروجی اختیاری پروژه. |
+| `CARRIER` | `websocket-lanes` (پیش‌فرض) یا `websocket` یا `auto`. در حالت `auto` طبق هیوریستیک مستند (فشار بودجه درخواست ایزوله) انتخاب می‌شود. |
+| `HOSTNAME` | لیست سفید دامنه‌ها با کاما (پیش‌فرض: همه). |
+| `MAX_STREAMS` | حداکثر استریم MTProto در هر نشست (پیش‌فرض ۶، بیشینه ۳۲). |
+| `SESSION_PATH` / `WS_PATH` | مسیرهای API حامل؛ اگر تنظیم نشوند برای هر دیپلوی از سکرت مشتق می‌شوند. مسیرهای قدیمی `/api/v1/session` و `/api/v1/ws` تا یک نسخه بعد هم پذیرفته می‌شوند. |
+| `DEBUG` | `true` برای لاگ تشخیصی بیشتر. |
+| `UP_BATCH_BYTES` | سقف coalescing آپ‌استریم (پیش‌فرض 262144 = 256 KiB). |
+| `DATA_CHUNK` | اندازه chunk ارسال DC→کلاینت (پیش‌فرض 64 KiB). |
+| `MAX_ISOLATE_QUEUED` | سقف سراسری بایت صف‌شده در ایزوله (پیش‌فرض 32MB) — نگهبان حافظه. |
+| `MAX_QUEUED` | سقف صف هر نشست (پیش‌فرض 16MB). |
+| `SESSION_TTL` | عمر نشست به ثانیه (پیش‌فرض 21600 = ۶ ساعت). |
+| `BOOTSTRAP_TTL` | عمر توکن bootstrap به ثانیه (پیش‌فرض 3600). |
+| `DC_OVERRIDE` | JSON بازنویسی لیست IP دیتاسنترها، مثل `{"2":["149.154.167.50"]}`. نامعتبر → نادیده + گزارش در status. |
+| `USER_SECRETS` | لیست برچسب کاربران با کاما؛ برای هر برچسب سکرت اختصاصی HMAC ساخته می‌شود و در پنل لیست می‌شود. حذف برچسب = ابطال (اتصال‌های جدید). |
+| `LEGACY_PORT_SECRETS` | `1` یا `true` = بازگشت رفتار قدیمی سکرت‌های بین‌پورتی (توصیه نمی‌شود). |
+| `ALERT_URL` | آدرس `https://` برای وب‌هوک هشدار (غیرفعال به‌صورت پیش‌فرض). فقط نام رویداد و شمارنده می‌فرستد؛ هرگز IP/توکن/سکرت نمی‌فرستد. |
 
-> [!WARNING]
-> If `SECRET` is not set, changing `ADMIN_KEY` also changes the secrets, and **every link you have shared stops working.**
+> [!NOTE]
+> متغیرهای `AD_TAG`، `GENERATOR_ENABLED`، `GENERATOR_KEY` و `ACCEPT_GENERATED` نسخه‌های قبل **حذف شده‌اند**؛ اگر تنظیمشان کنید در `/panel/status` به‌عنوان «متغیر ناشناخته» گزارش می‌شوند. دلیل حذف AD_TAG: `docs/ME-notes.md`.
 
 ---
 
-## Under heavy censorship
+## در فیلترینگ شدید
 
-Try these in order:
+به‌ترتیب امتحان کنید:
 
-1. **Switch ports.** Use another port from the list above.
-2. **Use a different domain.** If one domain is blocked, attach another one to the same Worker and add it to `EXTRA_HOSTS`.
-3. **Use a clean Cloudflare IP (desktop only).** If the IPs your domain normally resolves to are blocked, point your domain at a Cloudflare IP that still works on your network. Add one line to your `hosts` file:
-   - Windows: `C:\Windows\System32\drivers\etc\hosts`
-   - macOS / Linux: `/etc/hosts`
+1. **پورت را عوض کنید.** پورت دیگری از لیست بالا.
+2. **دامنه دیگر.** اگر یک دامنه فیلتر شد، دامنه دیگری به Worker وصل کنید و به `EXTRA_HOSTS` اضافه کنید.
+3. **IP تمیز کلودفلر (فقط دسکتاپ).** دامنه‌تان را در فایل hosts به یک IP سالم کلودفلر ببندید:
+   - ویندوز: `C:\Windows\System32\drivers\etc\hosts`
+   - مک/لینوکس: `/etc/hosts`
 
    ```text
    CLEAN_IP   tg.yourdomain.com
    ```
 
-   Replace `CLEAN_IP` with a Cloudflare IP that works on your network. Clean IPs vary by ISP and stop working over time, so test them yourself.
-4. **Turn off ECH where it is blocked (for example Russia).** In Cloudflare, open your domain → **SSL/TLS** → **Edge Certificates** → **Encrypted Client Hello (ECH)** → **Off**.
+4. **ECH را خاموش کنید (مثلاً روسیه).** Cloudflare → دامنه → **SSL/TLS** → **Edge Certificates** → **Encrypted Client Hello (ECH)** → **Off**.
 
 > [!NOTE]
-> No proxy works during a **complete** shutdown of international internet access. Cloudflare's servers are outside the country, so once the border is closed, nothing on Cloudflare can be reached. These measures help while access is filtered or partially restricted, not after it is fully cut.
+> هنگام **قطعی کامل** اینترنت بین‌الملل هیچ پروکسی‌ای کار نمی‌کند؛ سرورهای Cloudflare بیرون کشورند.
 
 ---
 
-## Troubleshooting
+## عیب‌یابی
 
-| What you see | What to do |
+| چه می‌بینید | چه کنید |
 |---|---|
-| The address shows an online store | Normal. The proxy works behind it. To open the panel, add `/YOUR_ADMIN_KEY` to the address. |
-| The panel address shows the store | The key in the address doesn't match `ADMIN_KEY`, or you didn't click **Deploy** after setting it. |
-| The setup page appears again | `ADMIN_KEY` is missing or shorter than 16 characters. |
-| Telegram shows "connecting" forever | Try another port. Then try another domain. On `workers.dev`, connect a custom domain instead. |
-| Links you shared stopped working | `ADMIN_KEY` was changed while `SECRET` was not set. Send out the new links from the panel. |
+| آدرس فروشگاهی نشان می‌دهد | طبیعی است؛ پروکسی پشت آن است. برای پنل از `/login` یا `/YOUR_ADMIN_KEY` استفاده کنید. |
+| پنل باز نمی‌شود | کلید با `ADMIN_KEY` نمی‌خواند یا بعد از تنظیم، **Deploy** نزده‌اید. بعد از تلاش‌های ناموفق، چند دقیقه قفل سراسری فعال می‌شود — کمی صبر کنید. |
+| دوباره صفحه راه‌اندازی می‌آید | `ADMIN_KEY` تنظیم نیست یا زیر ۱۶ کاراکتر است. |
+| تلگرام همیشه «connecting» است | پورت دیگر، سپس دامنه دیگر. روی `workers.dev` دامنه شخصی ببندید. صفحه `/panel/status` را بررسی کنید و `?probe=1` بزنید. |
+| لینک‌های ارسالی از کار افتادند | اگر `SECRET` تنظیم نبود و ADMIN_KEY عوض شده، از پنل لینک‌های جدید بفرستید. اگر `KEY_EPOCH` را عوض کرده‌اید، فقط نشست‌های جاری ری‌کانکت می‌شوند (خودکار). |
+| سکرت پورت X روی پورت Y کار نمی‌کند | از 1.3.0 جداسازی سخت است؛ سکرت همان پورت را استفاده کنید یا `LEGACY_PORT_SECRETS=1`. |
 
 ---
 
-## FAQ
+## پرسش‌های متداول
 
 <details>
-<summary><b>Which Telegram apps work?</b></summary>
-Any Telegram app that offers the <b>WEB</b> proxy type. Telegram Desktop already does. Android and iOS apps support it once the option arrives in their updates.
+<summary><b>کدام اپ‌های تلگرام کار می‌کنند؟</b></summary>
+هر اپی که نوع پروکسی <b>WEB</b> را دارد. تلگرام دسکتاپ دارد؛ موبایل با به‌روزرسانی‌ها.
 </details>
 
 <details>
-<summary><b>How many people can use one proxy?</b></summary>
-It is built for you and a small circle. Cloudflare's free plan allows 100,000 requests per day per account. For more people, it is better for each group to deploy its own Worker. That spreads the load, and a single leaked link doesn't take everyone down.
+<summary><b>چند نفر می‌توانند استفاده کنند؟</b></summary>
+برای شما و دایره کوچک‌تان ساخته شده. طرح رایگان کلودفلر ۱۰۰٬۰۰۰ درخواست در روز برای هر حساب دارد. برای جمع بیشتر، هر گروه Worker خودش را دیپلوی کند؛ هم بار پخش می‌شود و هم لو رفتن یک لینک همه را از کار نمی‌اندازد.
 </details>
 
 <details>
-<summary><b>Can Cloudflare or the proxy read my messages?</b></summary>
-No. Telegram encrypts traffic between your app and its servers. The proxy only forwards those encrypted bytes and cannot decrypt them.
+<summary><b>کلودفلر یا پروکسی می‌تواند پیام‌ها را بخواند؟</b></summary>
+نه. تلگرام ترافیک بین اپ شما و سرورهایش را رمز می‌کند؛ پروکسی فقط بایت‌های رمز را جابه‌جا می‌کند و نمی‌تواند بازشان کند.
 </details>
 
 <details>
-<summary><b>Can I add a sponsored channel (ad tag)?</b></summary>
-No. Sponsored channels require a server with a fixed outgoing port. Cloudflare's network changes outgoing ports, so this is not possible on Workers. The proxy connects straight to Telegram's servers, with no ads.
+<summary><b>کانال اسپانسری (ad tag) می‌توانم اضافه کنم؟</b></summary>
+نه. کانال اسپانسری به سروری با پورت خروجی ثابت نیاز دارد (پروتکل Middle-End)؛ شبکه کلودفلر پورت خروجی را تغییر می‌دهد و این از داخل Worker قابل حل نیست — تحلیل کامل در <code>docs/ME-notes.md</code>. این پروکسی مستقیم به سرورهای تلگرام وصل می‌شود، بدون تبلیغ.
+</details>
+
+<details>
+<summary><b>سکرت‌های کاربران (USER_SECRETS) چه فرقی با سکرت اصلی دارد؟</b></summary>
+برای هر برچسب یک سکرت یکتا از HMAC مشتق می‌شود؛ می‌توانید به هر نفر لینک خودش را بدهید و با حذف برچسب از env فقط او را ابطال کنید، بدون دست‌زدن به بقیه لینک‌ها.
 </details>
 
 ---
 
-## Disclaimer
+## سلب مسئولیت
 
-This project is provided for educational purposes and personal use. Running proxy services on Cloudflare Workers may conflict with Cloudflare's Terms of Service (Section 2.2.1(j)). You are responsible for how you use it.
+این پروژه برای مقاصد آموزشی و استفاده شخصی ارائه شده است. اجرای سرویس پروکسی روی Cloudflare Workers ممکن است با شرایط استفاده Cloudflare (بخش 2.2.1(j)) در تضاد باشد. مسئولیت نحوه استفاده با شماست.
 
 ---
 
-## Support
+## حمایت
 
-ProxyGosha is free and open source. To support its development, star the repository or donate:
+ProxyGosha رایگان و متن‌باز است. با ستاره‌کردن مخزن یا کمک مالی حمایت کنید:
 
 - **USDT (BEP20):** `0xd593ae9D32bEA690EC62460C54BF3951aFFF7803`
 - **USDT (TRC20):** `THaaHzoTwXfUfcrtYTDXRsMmk9qhnXa56M`
+
+</div>

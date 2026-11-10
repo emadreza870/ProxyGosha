@@ -1,0 +1,153 @@
+# ProxyGosha - Complete Technical Documentation for LLMs
+
+> Single-File Zero-Cost Telegram WEB Proxy for Cloudflare Workers (v1.3.0).
+
+## 1. Project Identity & Architecture
+
+ProxyGosha (`worker.js`) is a high-performance implementation of Telegram's "WEB" proxy carrier designed to run inside Cloudflare Workers without dedicated servers or VPS infrastructure.
+
+### The Problem It Solves
+Traditional MTProto proxies require:
+- A dedicated Linux Virtual Private Server (VPS) with recurring monthly hosting fees.
+- Exposure to active probing, deep packet inspection (DPI), and IP blocking on traditional ports.
+- Manual SSL/TLS certificate renewal, firewall rules, and container/process daemon management.
+
+ProxyGosha eliminates these requirements:
+- **Serverless & Free**: Runs 100% on Cloudflare Workers Free plan (100,000 requests/day; 10 ms CPU per request; 50 subrequests; 6 simultaneous connecting sockets; 128 MB isolate memory).
+- **Stealth TLS Camouflage**: All traffic passes over standard Cloudflare HTTPS / WSS on ports `443`, `2053`, `2083`, `2087`, `2096`, and `8443` backed by Cloudflare's trusted Anycast certificates.
+- **Active Probing Neutralization (v1.3.0)**: Unauthenticated visits, scanners and DPI probes always receive the same answer on every path (200 + storefront). The storefront brand, palette, products, favicon, `/health` payload and even the carrier API paths are deterministically derived from the deployment secret, so every deployment looks different while every probe looks identical to an unknown path.
+- **Direct-to-DC Tunneling**: Outbound connections to official Telegram Data Centers (DCs 1–5, DC203) use Cloudflare's native `connect()` API from `cloudflare:sockets`.
+
+### High-Level Topology
+```text
+[ Telegram Client (Desktop / Android / iOS) ]
+          │  HTTPS / WSS (Ports: 443, 2053, 2083, 2087, 2096, 8443)
+          ▼
+[ Cloudflare Global Anycast Edge ]
+          │
+          ▼
+[ worker.js (ProxyGosha v1.3.0, built from src/) ]
+  ├── Decoy Camouflage Engine (per-deployment branded storefront)
+  ├── Route Dispatcher (Decoy / Setup / Login / Panel / Status / Session / WS)
+  ├── Token & Port Secret Engine (HMAC-SHA256, host-bound, KEY_EPOCH)
+  ├── Fast Mode Pipe (0-CPU passthrough on downstream downloads)
+  ├── Upstream Batcher (256 KiB coalescing: 2x CTR, 1 write, 1 WINDOW)
+  └── Stream Multiplexer (`websocket-lanes` or `websocket`)
+          │  cloudflare:sockets (Raw Outbound TCP)
+          ▼
+[ Official Telegram Data Centers (DCs 1–5) ]
+```
+
+---
+
+## 2. Protocol & Performance Optimizations
+
+### Telegram "WEB" Proxy Carrier Protocol
+Telegram introduced the "WEB" proxy mode to tunnel MTProto traffic through standard HTTPS / WebSocket links:
+- **Carrier Endpoints (v1.3.0)**: the session and WebSocket paths are per-deployment and derived from the secret (e.g. `/s/<8hex>` and `/w/<8hex>`); operators may fix them with `SESSION_PATH`/`WS_PATH`. The historical paths `/api/v1/session` (POST bootstrap token) and `/api/v1/ws` (WebSocket upgrade) remain accepted for one release. The 9-byte handshake body and the WELCOME reply are byte-identical to v1.2.2.
+- **Framing**: Binary multiplexed frames: `OPEN (0x01)`, `DATA (0x02)`, `CLOSE (0x03)`, `WINDOW (0x04)`, `PING (0x05)`, `PONG (0x06)`, 8-byte header — unchanged.
+- **Subprotocols**: `tproxy-v1.<sessionToken>` and `tproxy-lane-v1.<sessionToken>.<laneId>` — unchanged.
+- **Stream Allocation**: Each logical MTProto stream is assigned an ID. The worker enforces a concurrency limit (`maxStreams: 6` default) to protect Free plan socket quotas.
+
+### Fast Mode (Zero-CPU Downstream Forwarding)
+In standard MTProto relays, incoming traffic from the DC must be decrypted by the proxy and re-encrypted for the client. In ProxyGosha:
+- The initial 64-byte DC Obfuscated2 header is deliberately constructed so that the DC derives encryption keys matching the exact keystream expected by the client.
+- As a result, bytes arriving from the Telegram DC are already encrypted for the client: they are forwarded directly without any AES-CTR work, eliminating CPU overhead for media/file downloads (which account for 90%+ of Telegram traffic).
+
+### Upstream Batching (Uplink Optimization, real since v1.3.0)
+Telegram MTProto client traffic often consists of small bursts (acks, typing indicators, short messages).
+- In v1.3.0 the upstream path genuinely coalesces queued frames up to 256 KiB (`UP_BATCH_BYTES`) before invoking WebCrypto: one `ctrAt` over the client-read keystream, one over the DC-write keystream, a single socket write and a single `WINDOW` grant for the total.
+- The batched output is byte-identical to the v1.2.2 per-frame path (AES-CTR keystream concatenation property, covered by tests including unaligned keystream positions).
+- A microtask yield before the first batch lets all frames of one WebSocket message join the queue, so a burst is usually one write.
+
+### 6-Port DPI Bypass Architecture
+To bypass network throttling on port 443 in restrictive regions:
+- The worker listens on all six Cloudflare HTTPS ports: `443`, `2053`, `2083`, `2087`, `2096`, and `8443`.
+- Each port uses a distinct, deterministically derived secret:
+  `portSecret = sha256("proxygosha-port-secret-v1\n" + baseSecret + "\n" + port).slice(0, 16)`
+- **Strict isolation (v1.3.0)**: a capability (HMAC of the secret over `tdesktop-web-proxy-bridge-v1\n<host>` or `<host>:<port>`) is only accepted on the port that owns it. `LEGACY_PORT_SECRETS=1` restores the v1.2.2 cross-port fallbacks.
+- HMAC verifies per bridge request are hard-capped (24) with early exit.
+
+### Why Middle-End (ME) / Ad Tags are Not Supported
+Telegram's Middle-End (ME) protocol (which enables sponsored channel ad tags via `@MTProxybot`) derives session encryption keys using the proxy's outbound TCP egress IP and source port as observed on Telegram's network interface.
+- Cloudflare Workers outbound TCP sockets (`cloudflare:sockets`) exit through shared Anycast CGNAT/NAPT edge infrastructure where the egress port is dynamically rewritten.
+- Workers cannot bind local ports or run raw UDP STUN tests.
+- Because the calculated keys mathematically mismatch, direct ME handshakes fail. ProxyGosha cleanly and reliably routes traffic directly to Telegram's front-end DCs.
+
+---
+
+## 3. Configuration & Management
+
+### Secret Model (v1.3.0)
+- **Recommended**: set an independent 32-hex `SECRET`. The proxy secret then has no dependence on ADMIN_KEY; rotating ADMIN_KEY no longer changes links.
+- **Legacy mode (ADMIN_KEY only)**: secrets derive as
+  `base = sha256("proxygosha-secret-from-admin-v2\n" + legacySealBytes + "\n" + ADMIN_KEY).slice(0,16)` — byte-identical to v1.2.2 (golden-tested). The panel shows a prominent warning plus the exact SECRET value that freezes current links. Weak/dictionary ADMIN_KEYs are flagged (24+ mixed chars recommended; below 16 the admin surface is disabled).
+- **BUILD_SEAL decoupling**: the historical XOR-obfuscated seal bytes are consumed ONLY by the legacy derivation above; all new-mode KDFs use the fixed domain-separation string `proxygosha-kdf-v3\0`. Attribution is a plain constant.
+- **Token engine**: bootstrap and session tokens are HMAC-SHA256 over `tgweb-token-v1\0 | kind | nonce | host`; the token key mixes `KEY_EPOCH` for mass revocation. Session TTL default 21600 s (6 h); the bridge refreshes its bootstrap by re-fetching its own URL when reconnects outlive a token.
+
+### One-Variable Setup
+Only `ADMIN_KEY` is required in Cloudflare Dashboard (Settings -> Variables and Secrets):
+- `ADMIN_KEY`: (String, Required for the panel) administrative password (24+ mixed characters recommended, 16 minimum).
+- If `ADMIN_KEY` is not configured, the worker displays an interactive bilingual setup page proposing both a strong ADMIN_KEY and a 32-hex SECRET.
+
+### Optional Variables (complete list, all read by the code)
+- `SECRET`: independent 32-hex proxy secret (recommended; see Secret Model).
+- `KEY_EPOCH`: change to revoke all issued carrier tokens.
+- `EXTRA_HOSTS`: comma-separated additional hostnames.
+- `DECOY_URL`: external website reverse-proxied as the decoy (edge-cached 60 s via caches.default).
+- `CARRIER`: `websocket-lanes` (default), `websocket`, or `auto` (heuristic: switches to `websocket` for new bridge pages once the isolate served >= 500 sessions, to conserve the 100k/day request budget).
+- `HOSTNAME`: comma-separated domain allowlist (default: `*`).
+- `DEBUG`: `true`/`1` for diagnostic logs.
+- `MAX_STREAMS` (6, max 32), `SESSION_TTL` (21600 s), `BOOTSTRAP_TTL` (3600 s), `UP_BATCH_BYTES` (262144), `DATA_CHUNK` (65536), `MAX_QUEUED` (16 MB), `MAX_ISOLATE_QUEUED` (32 MB isolate-wide memory guard with adaptive stream-window reduction under pressure).
+- `SESSION_PATH` / `WS_PATH`: fix the carrier API paths (otherwise derived from the secret per deployment).
+- `DC_OVERRIDE`: JSON object mapping DC id to IP list (validated; IPv6 addresses parse but are UNVERIFIED against real Telegram).
+- `USER_SECRETS`: comma-separated labels; each label gets its own HMAC-derived secret and mode (USER_MODE_BASE=20..35), listed in the panel, revocable individually.
+- `LEGACY_PORT_SECRETS`: `1`/`true` restores v1.2.2 cross-port secret fallbacks.
+- `ALERT_URL`: optional https webhook for coarse alerts (dc_fail, pong watchdog); rate-limited to one per type per 5 minutes; never sends IPs, tokens or secrets; disabled unless set.
+- **Removed since v1.2.2**: `AD_TAG`, `GENERATOR_ENABLED`, `GENERATOR_KEY`, `ACCEPT_GENERATED` (unknown variables are reported in /status).
+
+### Management & Telemetry Endpoints
+- **Login**: `https://<YOUR_DOMAIN>/login` — POST form; issues an HttpOnly, Secure, SameSite=Strict HMAC-signed cookie valid 6 h. Coarse global backoff after repeated failures (no IP storage; deliberately isolate-wide).
+- **Management Panel**: `https://<YOUR_DOMAIN>/panel` (cookie) or the deprecated `https://<YOUR_DOMAIN>/<ADMIN_KEY>`. Shows one-tap connect links, per-port secrets with strict isolation, server-side SVG QR codes, CSP-compatible copy buttons (nonce'd inline script), per-user secret links and a client-side port latency test page.
+- **Live Status & DC Probe**: `https://<YOUR_DOMAIN>/panel/status` (or `/<ADMIN_KEY>/status`): isolate uptime, active sessions, streams, bandwidth, memory-guard readout, per-DC connect latency EMA with last-good endpoints, full environment report (set/unset/invalid/unknown variables, never values), recent events log, and the on-demand DC reachability probe (`?probe=1`).
+- **Privacy Assurance**: telemetry counters and event logs are strictly ephemeral (isolate memory only). No user IP addresses, tokens, or cryptographic keys are ever logged. Errors are logged by error-class name only.
+
+---
+
+## 4. Domain Requirements & Circumvention
+
+The default `*.workers.dev` subdomain provided by Cloudflare is blocked by SNI and DNS filtering in several countries:
+- **Iran**: Comprehensive block of `*.workers.dev`.
+- **China**: Great Firewall (GFW) DNS tampering and SNI reset on `*.workers.dev`.
+- **Russia**: Roskomnadzor restrictions targeting default developer domains.
+
+**Requirement**: A custom domain must be attached to the Worker via Cloudflare Dashboard -> Settings -> Domains & Routes -> Custom Domain (e.g. `tg.yourdomain.com`).
+- Free domain registrars (e.g. [digitalplat.org](https://domain.digitalplat.org/)) can be used.
+- National ccTLDs (such as `.ir` or `.ru`) are functional but subject to national registry verification.
+- Low-cost international TLDs (e.g. `.xyz`, `.top` via Namecheap) can be registered with cryptocurrency or international cards.
+
+---
+
+## 5. Client Link Format
+```text
+tg://webproxy?server=<YOUR_CUSTOM_DOMAIN>&port=<PORT>&secret=<PORT_SECRET>
+```
+Supported ports: `443`, `2053`, `2083`, `2087`, `2096`, `8443`.
+
+---
+
+## 6. Official Community Links
+- Telegram Channel: [t.me/amirdotlog](https://t.me/amirdotlog)
+- YouTube Channel: [youtube.com/@amirmarandidev](https://www.youtube.com/@amirmarandidev)
+
+---
+
+## 7. Repository Files
+- `worker.js`: built single-file ES Module deployable (esbuild output, committed; build with `npm run build` from `src/`).
+- `src/`: modular source of truth.
+- `test/`: vitest suite (tokens, bridge capability, frame parser limits, ctrAt incl. unaligned positions, batching equivalence, decoy uniformity, legacy golden values).
+- `README.md`: Persian documentation (primary) and deployment walkthrough.
+- `docs/README.ru.md`, `docs/README.zh.md`: Russian and Chinese summaries; `docs/README.fa.md`: Persian pointer.
+- `docs/ME-notes.md`: Middle-End protocol research (why ad tags are impossible on Workers).
+- `CHANGELOG.md`, `.github/SECURITY.md`, `wrangler.jsonc`, `.github/workflows/*` (CI + release with SHA-256).
+- `LICENSE`: MIT License.
